@@ -426,7 +426,7 @@ impl<'a> Parser<'a> {
                 Keyword::CASE => self.parse_case_expr(),
                 Keyword::CAST => self.parse_cast_expr(),
                 Keyword::TRY_CAST => self.parse_try_cast_expr(),
-                Keyword::EXISTS => self.parse_exists_expr(),
+                // Keyword::EXISTS => self.parse_exists_expr(),
                 Keyword::EXTRACT => self.parse_extract_expr(),
                 Keyword::POSITION => self.parse_position_expr(),
                 Keyword::SUBSTRING => self.parse_substring_expr(),
@@ -782,10 +782,24 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /// Parse a SQL EXISTS expression e.g. `WHERE EXISTS(SELECT ...)`.
-    pub fn parse_exists_expr(&mut self) -> Result<Expr, ParserError> {
+    /// Parse a SQL EXISTS expression e.g. `WHERE EXISTS(SELECT ...)` or `WHERE NOT EXISTS(SELECT ...)`.
+    pub fn parse_exists_expr(&mut self, expr: Expr, negated: bool) -> Result<Expr, ParserError> {
         self.expect_token(&Token::LParen)?;
-        let exists_node = Expr::Exists(Box::new(self.parse_query()?));
+
+        let exists_node = if negated {
+            Expr::UnaryOp {
+                op: UnaryOperator::Not,
+                expr: Box::new(Expr::Exists {
+                    expr: Box::new(expr),
+                    subquery: Box::new(self.parse_query()?),
+                }),
+            }
+        } else {
+            Expr::Exists {
+                expr: Box::new(expr),
+                subquery: Box::new(self.parse_query()?),
+            }
+        };
         self.expect_token(&Token::RParen)?;
         Ok(exists_node)
     }
@@ -1183,11 +1197,13 @@ impl<'a> Parser<'a> {
                         )
                     }
                 }
-                Keyword::NOT | Keyword::IN | Keyword::BETWEEN => {
+                Keyword::NOT | Keyword::IN | Keyword::BETWEEN | Keyword::EXISTS => {
                     self.prev_token();
                     let negated = self.parse_keyword(Keyword::NOT);
                     if self.parse_keyword(Keyword::IN) {
                         self.parse_in(expr, negated)
+                    } else if self.parse_keyword(Keyword::EXISTS) {
+                        self.parse_exists_expr(expr, negated)
                     } else if self.parse_keyword(Keyword::BETWEEN) {
                         self.parse_between(expr, negated)
                     } else {

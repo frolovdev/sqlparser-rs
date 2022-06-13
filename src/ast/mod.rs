@@ -339,7 +339,10 @@ pub enum Expr {
     },
     /// An exists expression `EXISTS(SELECT ...)`, used in expressions like
     /// `WHERE EXISTS (SELECT ...)`.
-    Exists(Box<Query>),
+    Exists {
+        expr: Box<Expr>,
+        subquery: Box<Query>,
+    },
     /// A parenthesized subquery `(SELECT ...)`, used in expression like
     /// `SELECT (subquery) AS x` or `WHERE (subquery) = x`
     Subquery(Box<Query>),
@@ -432,7 +435,22 @@ impl fmt::Display for Expr {
                 if op == &UnaryOperator::PGPostfixFactorial {
                     write!(f, "{}{}", expr, op)
                 } else {
-                    write!(f, "{} {}", op, expr)
+                    match expr.as_ref() {
+                        Expr::Exists { expr, subquery } => {
+                            write!(
+                                f,
+                                "{} {}EXISTS ({})",
+                                expr,
+                                if op == &UnaryOperator::Not {
+                                    "NOT "
+                                } else {
+                                    ""
+                                },
+                                subquery
+                            )
+                        }
+                        _ => write!(f, "{} {}", op, expr),
+                    }
                 }
             }
             Expr::Cast { expr, data_type } => write!(f, "CAST({} AS {})", expr, data_type),
@@ -466,7 +484,8 @@ impl fmt::Display for Expr {
                 }
                 write!(f, " END")
             }
-            Expr::Exists(s) => write!(f, "EXISTS ({})", s),
+
+            // Expr::Exists { expr, subquery } => write!(f, "{} EXISTS ({})", expr, subquery),
             Expr::Subquery(s) => write!(f, "({})", s),
             Expr::ListAgg(listagg) => write!(f, "{}", listagg),
             Expr::GroupingSets(sets) => {
@@ -557,6 +576,7 @@ impl fmt::Display for Expr {
             Expr::CompositeAccess { expr, key } => {
                 write!(f, "{}.{}", expr, key)
             }
+            _ => panic!(),
         }
     }
 }

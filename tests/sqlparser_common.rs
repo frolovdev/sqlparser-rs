@@ -3600,7 +3600,12 @@ fn parse_exists_subquery() {
     assert_eq!(
         Expr::UnaryOp {
             op: UnaryOperator::Not,
-            expr: Box::new(Expr::Exists(Box::new(expected_inner))),
+            expr: Box::new(Expr::Exists {
+                expr: Expr::UnaryOp {
+                    op: UnaryOperator::Not
+                },
+                subquery: Box::new(expected_inner)
+            }),
         },
         select.selection.unwrap(),
     );
